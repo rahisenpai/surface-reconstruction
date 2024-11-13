@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/SurfaceReconstruction.dir/src/camera.cpp.o CMakeFiles/SurfaceReconstruction.dir/src/contour.cpp.o CMakeFiles/SurfaceReconstruction.dir/src/main.cpp.o -o SurfaceReconstruction  /usr/lib/x86_64-linux-gnu/libGL.so /usr/lib/x86_64-linux-gnu/libGLEW.so /usr/lib/x86_64-linux-gnu/libglfw.so.3.3 -lGLU 
