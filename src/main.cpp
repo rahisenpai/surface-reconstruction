@@ -8,7 +8,7 @@ int main() {
     try {
         std::string ringPath = "../data/ringc1.contour";
         std::string horsePath = "../data/horsenp.contour";
-        std::vector<ContourPlane> planes = parseContourFile(horsePath);
+        std::vector<ContourPlane> planes = parseContourFile(ringPath);
 
         if (!glfwInit()) {
             std::cerr << "Failed to initialize GLFW\n";
