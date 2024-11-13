@@ -1,3 +1,0 @@
-/home/aza/Desktop/cgProj/build/CMakeFiles/SurfaceReconstruction.dir
-/home/aza/Desktop/cgProj/build/CMakeFiles/edit_cache.dir
-/home/aza/Desktop/cgProj/build/CMakeFiles/rebuild_cache.dir
