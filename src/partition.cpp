@@ -154,7 +154,6 @@ void SpacePartitioner::computeNonParallelPlaneCells() {
     findIntersectionVertices(nonParallelPlanes);
 }
 
-// In partition.cpp, modify findIntersectionVertices:
 
 void SpacePartitioner::findIntersectionVertices(const std::vector<ContourPlane>& planes) {
     std::vector<Vertex> intersectionVertices;

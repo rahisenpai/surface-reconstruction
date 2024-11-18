@@ -5,6 +5,46 @@
 #include "contour.h"
 #include "partition.h"
 
+// Helper function to compute distance between two vertices
+float distance(const Vertex& v1, const Vertex& v2) {
+    return std::sqrt((v1.x - v2.x) * (v1.x - v2.x) +
+                     (v1.y - v2.y) * (v1.y - v2.y) +
+                     (v1.z - v2.z) * (v1.z - v2.z));
+}
+
+// Medial axis approximation using Voronoi-like approach
+std::vector<std::pair<Vertex, Vertex>> computeMedialAxis(const ContourPlane& plane) {
+    std::vector<std::pair<Vertex, Vertex>> medialAxisEdges;
+
+    for (size_t i = 0; i < plane.vertices.size(); ++i) {
+        for (size_t j = i + 1; j < plane.vertices.size(); ++j) {
+            // Compute midpoint between vertices i and j
+            Vertex mid;
+            mid.x = (plane.vertices[i].x + plane.vertices[j].x) / 2;
+            mid.y = (plane.vertices[i].y + plane.vertices[j].y) / 2;
+            mid.z = (plane.vertices[i].z + plane.vertices[j].z) / 2;
+
+            // Simplified filtering: Only add edges close to the vertices
+            if (distance(mid, plane.vertices[i]) < 1.0f) {
+                medialAxisEdges.emplace_back(plane.vertices[i], plane.vertices[j]);
+            }
+        }
+    }
+
+    return medialAxisEdges;
+}
+
+// Rendering function for medial axis
+void renderMedialAxis(const std::vector<std::pair<Vertex, Vertex>>& medialAxisEdges) {
+    glColor3f(0.0f, 0.0f, 1.0f); // Blue for medial axis
+    glBegin(GL_LINES);
+    for (const auto& edge : medialAxisEdges) {
+        glVertex3f(edge.first.x, edge.first.y, edge.first.z);
+        glVertex3f(edge.second.x, edge.second.y, edge.second.z);
+    }
+    glEnd();
+}
+
 int main()
 {
     try
@@ -13,7 +53,7 @@ int main()
         std::string horsePath = "../data/horsenp.contour";
         std::string pellipPath = "../data/pellip.contour";
         std::string sshapePath = "../data/sshape.contour";
-        std::vector<ContourPlane> contourPlanes = parseContourFile(sshapePath);
+        std::vector<ContourPlane> contourPlanes = parseContourFile(pellipPath);
 
         SpacePartitioner spacePartitioner(contourPlanes);
         std::vector<ConvexCell> cells = spacePartitioner.computeCells();
@@ -56,6 +96,12 @@ int main()
         // Capture the mouse
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+        std::vector<std::vector<std::pair<Vertex, Vertex>>> medialAxisEdges;
+        // Compute medial axis for all planes
+        for (const auto& plane : contourPlanes) {
+            medialAxisEdges.push_back(computeMedialAxis(plane));
+        }
+
         while (!glfwWindowShouldClose(window))
         {
             int width, height;
@@ -66,8 +112,10 @@ int main()
             updateCamera();
 
             renderContourPlanes(contourPlanes);
-
             spacePartitioner.renderCells();
+            for (int i=0; i<contourPlanes.size(); i++) {
+                renderMedialAxis(medialAxisEdges[i]);
+            }
 
             glfwSwapBuffers(window);
             glfwPollEvents();
