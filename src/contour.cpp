@@ -1,6 +1,7 @@
 #include "contour.h"
 #include <iostream>
 #include <fstream>
+#include <stdexcept>
 
 std::vector<ContourPlane> parseContourFile(const std::string& filePath) {
     std::ifstream file(filePath);
@@ -8,33 +9,34 @@ std::vector<ContourPlane> parseContourFile(const std::string& filePath) {
         throw std::runtime_error("Could not open file");
     }
 
+    std::vector<ContourPlane> contourPlanes;
     int numPlanes;
     file >> numPlanes;
 
-    std::vector<ContourPlane> planes;
-    planes.reserve(numPlanes);
+    contourPlanes.reserve(numPlanes);
 
     for (int i = 0; i < numPlanes; ++i) {
-        ContourPlane plane;
+        ContourPlane contourPlane;
+        Plane& plane = contourPlane.plane;
         file >> plane.a >> plane.b >> plane.c >> plane.d;
 
-        int numVertices, numEdges;
-        file >> numVertices >> numEdges;
+        file >> contourPlane.numVertices >> contourPlane.numEdges;
 
-        plane.vertices.resize(numVertices);
-        for (int j = 0; j < numVertices; ++j) {
-            file >> plane.vertices[j].x >> plane.vertices[j].y >> plane.vertices[j].z;
+        contourPlane.vertices.resize(contourPlane.numVertices);
+        for (int j = 0; j < contourPlane.numVertices; ++j) {
+            file >> contourPlane.vertices[j].x >> contourPlane.vertices[j].y >> contourPlane.vertices[j].z;
         }
 
-        plane.edges.resize(numEdges);
-        for (int j = 0; j < numEdges; ++j) {
-            file >> plane.edges[j].vi1 >> plane.edges[j].vi2 >> plane.edges[j].mi1 >> plane.edges[j].mi2;
+        contourPlane.edges.resize(contourPlane.numEdges);
+        for (int j = 0; j < contourPlane.numEdges; ++j) {
+            file >> contourPlane.edges[j].vertexIndex1 >> contourPlane.edges[j].vertexIndex2 
+                 >> contourPlane.edges[j].materialIndexLeft >> contourPlane.edges[j].materialIndexRight;
         }
 
-        planes.push_back(plane);
+        contourPlanes.push_back(contourPlane);
     }
 
-    return planes;
+    return contourPlanes;
 }
 
 void renderContourPlanes(const std::vector<ContourPlane>& planes) {
@@ -43,8 +45,8 @@ void renderContourPlanes(const std::vector<ContourPlane>& planes) {
     glBegin(GL_LINES);
     for (const auto& plane : planes) {
         for (const auto& edge : plane.edges) {
-            const Vertex& v1 = plane.vertices[edge.vi1];
-            const Vertex& v2 = plane.vertices[edge.vi2];
+            const Vertex& v1 = plane.vertices[edge.vertexIndex1];
+            const Vertex& v2 = plane.vertices[edge.vertexIndex2];
 
             // Set color for the edges (e.g., red color)
             glColor3f(1.0f, 0.0f, 0.0f);
