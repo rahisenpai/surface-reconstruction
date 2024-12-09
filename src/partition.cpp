@@ -1,8 +1,9 @@
 #include "partition.h"
 
-
 SpacePartitioner::SpacePartitioner(const std::vector<ContourPlane>& contourPlanes) 
     : originalPlanes(contourPlanes) {
+    BoundingBox bbox = computeTightBoundingBox();
+    addBoundingBoxPlanes(bbox);
     classifyPlanes();
 }
 
@@ -249,4 +250,86 @@ void SpacePartitioner::createCellFromIntersection(
     }
 
     cells.push_back(cell);
+}
+
+// Add to partition.cpp
+BoundingBox SpacePartitioner::computeTightBoundingBox() const {
+    BoundingBox bbox;
+    bbox.min = glm::vec3(FLT_MAX);
+    bbox.max = glm::vec3(-FLT_MAX);
+
+    // Find bounds from all vertices in contour planes
+    for (const auto& contourPlane : originalPlanes) {
+        for (const auto& vertex : contourPlane.vertices) {
+            bbox.min.x = std::min(bbox.min.x, vertex.x);
+            bbox.min.y = std::min(bbox.min.y, vertex.y);
+            bbox.min.z = std::min(bbox.min.z, vertex.z);
+            
+            bbox.max.x = std::max(bbox.max.x, vertex.x);
+            bbox.max.y = std::max(bbox.max.y, vertex.y);
+            bbox.max.z = std::max(bbox.max.z, vertex.z);
+        }
+    }
+
+    // Expand bbox by factor of 2
+    glm::vec3 center = (bbox.max + bbox.min) * 0.5f;
+    glm::vec3 extent = bbox.max - center;
+    bbox.min = center - extent * 2.0f;
+    bbox.max = center + extent * 2.0f;
+
+    return bbox;
+}
+
+void SpacePartitioner::addBoundingBoxPlanes(const BoundingBox& bbox) {
+    // Add six bounding box planes
+    ContourPlane boxPlanes[6];
+    
+    // Left plane (x = min.x)
+    boxPlanes[0].plane = Plane(1.0f, 0.0f, 0.0f, -bbox.min.x);
+    // Right plane (x = max.x)
+    boxPlanes[1].plane = Plane(-1.0f, 0.0f, 0.0f, bbox.max.x);
+    // Bottom plane (y = min.y)
+    boxPlanes[2].plane = Plane(0.0f, 1.0f, 0.0f, -bbox.min.y);
+    // Top plane (y = max.y)
+    boxPlanes[3].plane = Plane(0.0f, -1.0f, 0.0f, bbox.max.y);
+    // Front plane (z = min.z)
+    boxPlanes[4].plane = Plane(0.0f, 0.0f, 1.0f, -bbox.min.z);
+    // Back plane (z = max.z)
+    boxPlanes[5].plane = Plane(0.0f, 0.0f, -1.0f, bbox.max.z);
+
+    // Add vertices for each plane (for visualization)
+    for (int i = 0; i < 6; ++i) {
+        ContourPlane& boxPlane = boxPlanes[i];
+        boxPlane.numVertices = 4;
+        boxPlane.vertices.resize(4);
+        
+        // Calculate vertices based on plane orientation
+        if (i < 2) { // X planes
+            float x = (i == 0) ? bbox.min.x : bbox.max.x;
+            boxPlane.vertices = {
+                Vertex(x, bbox.min.y, bbox.min.z),
+                Vertex(x, bbox.max.y, bbox.min.z),
+                Vertex(x, bbox.max.y, bbox.max.z),
+                Vertex(x, bbox.min.y, bbox.max.z)
+            };
+        } else if (i < 4) { // Y planes
+            float y = (i == 2) ? bbox.min.y : bbox.max.y;
+            boxPlane.vertices = {
+                Vertex(bbox.min.x, y, bbox.min.z),
+                Vertex(bbox.max.x, y, bbox.min.z),
+                Vertex(bbox.max.x, y, bbox.max.z),
+                Vertex(bbox.min.x, y, bbox.max.z)
+            };
+        } else { // Z planes
+            float z = (i == 4) ? bbox.min.z : bbox.max.z;
+            boxPlane.vertices = {
+                Vertex(bbox.min.x, bbox.min.y, z),
+                Vertex(bbox.max.x, bbox.min.y, z),
+                Vertex(bbox.max.x, bbox.max.y, z),
+                Vertex(bbox.min.x, bbox.max.y, z)
+            };
+        }
+
+        originalPlanes.push_back(boxPlane);
+    }
 }

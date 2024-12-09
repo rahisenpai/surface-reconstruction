@@ -25,6 +25,11 @@ struct PlaneGroup
     glm::vec3 normal;
 };
 
+struct BoundingBox {
+        glm::vec3 min;
+        glm::vec3 max;
+};
+
 class SpacePartitioner
 {
 public:
@@ -38,6 +43,8 @@ private:
     std::vector<ContourPlane> nonParallelPlanes;
     std::vector<ConvexCell> cells;
 
+    BoundingBox computeTightBoundingBox() const;
+    void addBoundingBoxPlanes(const BoundingBox& bbox);
     void createSlabCell(const Plane &bottom, const Plane &top);
     void findIntersectionVertices(const std::vector<ContourPlane> &planes);
     void createCellFromIntersection(const std::vector<Vertex> &cellVertices, const std::vector<Plane> &boundaryPlanes);
