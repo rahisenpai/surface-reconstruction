@@ -3,6 +3,10 @@
 #include <CGAL/bounding_box.h>
 #include <CGAL/convex_hull_3.h>
 #include <CGAL/Cartesian_converter.h>
+#include <CGAL/IO/Polyhedron_iostream.h>
+#include <CGAL/IO/Nef_polyhedron_iostream_3.h>
+#include <fstream>
+#include <iostream>
 
 // Converter between kernels
 typedef CGAL::Cartesian_converter<InexactKernel, ExactKernel> IK_to_EK;
@@ -66,14 +70,94 @@ Nef_polyhedron SpacePartitioner::computeBoundingBox() const {
 
 void SpacePartitioner::partition() {
     m_partitionedSpace = computeBoundingBox();
+    std::vector<Nef_polyhedron> nefPolys;
     
+    recursivePartition(m_partitionedSpace, m_contourPlanes, nefPolys);
+
+    // Filter elementary cells
+    std::vector<Nef_polyhedron> elementaryPolys;
+    
+    for (size_t i = 0; i < nefPolys.size(); ++i) {
+        bool isElementary = true;
+        
+        // Convert to Polyhedron to compute volume
+        CGAL::Polyhedron_3<ExactKernel> poly_i;
+        nefPolys[i].convert_to_polyhedron(poly_i);
+        
+        for (size_t j = 0; j < nefPolys.size(); ++j) {
+            if (i != j) {
+                CGAL::Polyhedron_3<ExactKernel> poly_j;
+                nefPolys[j].convert_to_polyhedron(poly_j);
+                
+                // Check intersection
+                Nef_polyhedron intersection = nefPolys[i] * nefPolys[j];
+                
+                if (!intersection.is_empty()) {
+                    CGAL::Polyhedron_3<ExactKernel> poly_intersection;
+                    intersection.convert_to_polyhedron(poly_intersection);
+                    
+                    // Compare number of vertices and facets instead of volume
+                    if (poly_intersection.size_of_vertices() == poly_i.size_of_vertices() ||
+                        poly_intersection.size_of_vertices() == poly_j.size_of_vertices()) {
+                        if (poly_i.size_of_vertices() <= poly_j.size_of_vertices()) {
+                            isElementary = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (isElementary) {
+            elementaryPolys.push_back(nefPolys[i]);
+        }
+    }
+
+    // Convert to regular polyhedra
+    for (const auto& cell : elementaryPolys) {
+        CGAL::Polyhedron_3<ExactKernel> poly;
+        cell.convert_to_polyhedron(poly);
+        m_convexCells.push_back(poly);
+    }
+}
+
+void SpacePartitioner::recursivePartition(
+    Nef_polyhedron& space, 
+    const std::vector<ContourPlane>& contourPlanes, 
+    std::vector<Nef_polyhedron>& nefPolys) {
+    
+    if (contourPlanes.empty()) {
+        if (!space.is_empty() && space.number_of_vertices() > 0) {
+            nefPolys.push_back(space);
+        }
+        return;
+    }
+    
+    // Get the first plane
+    const ContourPlane& plane = contourPlanes[0];
     IK_to_EK to_exact;
+    ExactKernel::Plane_3 exact_plane = to_exact(plane.plane);
     
-    for (const auto& contourPlane : m_contourPlanes) {
-        // Convert inexact plane to exact plane
-        ExactKernel::Plane_3 exact_plane = to_exact(contourPlane.plane);
-        Nef_polyhedron plane_nef(exact_plane);
-        m_partitionedSpace *= plane_nef;
+    // Create both halfspaces
+    Nef_polyhedron plane_nef(exact_plane, Nef_polyhedron::INCLUDED);
+    Nef_polyhedron complement_nef = plane_nef.complement();
+    
+    // Create two subspaces
+    Nef_polyhedron positive_space = space * plane_nef;
+    Nef_polyhedron negative_space = space * complement_nef;
+    
+    // Only recurse on non-empty spaces
+    std::vector<ContourPlane> remaining_planes(
+        contourPlanes.begin() + 1, 
+        contourPlanes.end()
+    );
+    
+    if (!positive_space.is_empty() && positive_space.number_of_vertices() > 0) {
+        recursivePartition(positive_space, remaining_planes, nefPolys);
+    }
+    
+    if (!negative_space.is_empty() && negative_space.number_of_vertices() > 0) {
+        recursivePartition(negative_space, remaining_planes, nefPolys);
     }
 }
 
@@ -101,6 +185,22 @@ void SpacePartitioner::renderPartitions() const {
         glVertex3d(CGAL::to_double(v2.x()),
                   CGAL::to_double(v2.y()), 
                   CGAL::to_double(v2.z()));
+        glEnd();
+    }
+}
+
+void SpacePartitioner::renderPolyhedron(const CGAL::Polyhedron_3<ExactKernel>& poly) const {
+    EK_to_IK to_inexact;
+    glColor3f(0.0f, 0.0f, 1.0f); 
+    glLineWidth(2.0f);
+
+    for (auto e = poly.edges_begin(); e != poly.edges_end(); ++e) {
+        Point v1 = to_inexact(e->vertex()->point());
+        Point v2 = to_inexact(e->opposite()->vertex()->point());
+
+        glBegin(GL_LINES);
+        glVertex3d(CGAL::to_double(v1.x()), CGAL::to_double(v1.y()), CGAL::to_double(v1.z()));
+        glVertex3d(CGAL::to_double(v2.x()), CGAL::to_double(v2.y()), CGAL::to_double(v2.z()));
         glEnd();
     }
 }
