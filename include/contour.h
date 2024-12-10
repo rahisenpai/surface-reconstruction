@@ -1,51 +1,34 @@
+// contour.h
 #ifndef CONTOUR_H
 #define CONTOUR_H
 
-#include <vector>
-#include <string>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Extended_cartesian.h>
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/Plane_3.h>
 #include <GL/glew.h>
 
-struct Plane {
-    float a, b, c, d;
+// Kernel definitions
+typedef CGAL::Extended_cartesian<CGAL::Gmpq> ExactKernel;
+typedef CGAL::Exact_predicates_inexact_constructions_kernel InexactKernel;
 
-    // Default constructor
-    Plane() : a(0), b(0), c(0), d(0) {}
+// Type definitions for input/rendering (inexact)
+typedef InexactKernel::Point_3 Point;
+typedef InexactKernel::Plane_3 Plane;
+typedef CGAL::Polyhedron_3<InexactKernel> Polyhedron;
 
-    // Constructor with parameters
-    Plane(float a_, float b_, float c_, float d_)
-        : a(a_), b(b_), c(c_), d(d_) {}
-};
-
-struct Vertex {
-    float x, y, z;
-    std::vector<int> associatedPlanes; // Indices of planes intersecting at this vertex
-    std::vector<int> associatedEdges;  // Indices of edges connected to this vertex
-
-    Vertex() : x(0), y(0), z(0) {}
-    Vertex(float x_, float y_, float z_)
-        : x(x_), y(y_), z(z_) {}
-};
-
-struct Edge {
-    int vertexIndex1, vertexIndex2;   // Indices of the two endpoints
-    int materialIndexLeft, materialIndexRight; // Indices of the materials on the left and right sides
-    int planeIndex1, planeIndex2;     // Indices of the two planes defining the edge
-};
-
-struct Face {
-    int planeIndex;                   // Index of the defining plane
-    std::vector<int> edgeIndices;     // Indices of edges forming the boundary
-};
+// Type definitions for exact computations
+typedef ExactKernel::Point_3 ExactPoint;
+typedef ExactKernel::Plane_3 ExactPlane;
+typedef CGAL::Polyhedron_3<ExactKernel> ExactPolyhedron;
 
 struct ContourPlane {
     Plane plane;
-    int numVertices;
-    int numEdges;
-    std::vector<Vertex> vertices;
-    std::vector<Edge> edges;
+    std::vector<Point> vertices;
+    std::vector<std::pair<int, int>> edges;
 };
 
 std::vector<ContourPlane> parseContourFile(const std::string& filePath);
 void renderContourPlanes(const std::vector<ContourPlane>& planes);
 
-#endif // CONTOUR_H
+#endif

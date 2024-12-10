@@ -1,59 +1,24 @@
+// partition.h
 #ifndef PARTITION_H
 #define PARTITION_H
 
+#include <CGAL/Nef_polyhedron_3.h>
 #include "contour.h"
-#include <vector>
-#include <map>
-#include <glm/glm.hpp>
-#include <glm/gtc/epsilon.hpp>
-#include <algorithm>
-#include <set>
-#include <glm/gtx/vector_angle.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <iostream>
 
-struct ConvexCell
-{
-    std::vector<Plane> boundaryPlanes;
-    std::vector<Vertex> vertices;
-    std::vector<Edge> edges;
-};
+typedef CGAL::Nef_polyhedron_3<ExactKernel> Nef_polyhedron;
 
-struct PlaneGroup
-{
-    std::vector<ContourPlane> planes;
-    glm::vec3 normal;
-};
-
-struct BoundingBox {
-        glm::vec3 min;
-        glm::vec3 max;
-};
-
-class SpacePartitioner
-{
+class SpacePartitioner {
 public:
-    SpacePartitioner(const std::vector<ContourPlane> &contourPlanes);
-    std::vector<ConvexCell> computeCells();
-    void renderCells();
+    SpacePartitioner(const std::vector<ContourPlane>& contourPlanes);
+    void partition();
+    void renderPartitions() const;
 
 private:
-    std::vector<ContourPlane> originalPlanes;
-    std::vector<PlaneGroup> parallelGroups;
-    std::vector<ContourPlane> nonParallelPlanes;
-    std::vector<ConvexCell> cells;
-
-    BoundingBox computeTightBoundingBox() const;
-    void addBoundingBoxPlanes(const BoundingBox& bbox);
-    void createSlabCell(const Plane &bottom, const Plane &top);
-    void findIntersectionVertices(const std::vector<ContourPlane> &planes);
-    void createCellFromIntersection(const std::vector<Vertex> &cellVertices, const std::vector<Plane> &boundaryPlanes);
-    float computeDistance(const Plane &plane, const glm::vec3 &point);
-    void classifyPlanes();
-    bool arePlanesParallel(const Plane &p1, const Plane &p2);
-    void computeParallelPlaneCells();
-    void computeNonParallelPlaneCells();
-    glm::vec3 computePlaneIntersection(const Plane &p1, const Plane &p2, const Plane &p3);
+    Nef_polyhedron computeBoundingBox() const;
+    std::pair<Point, Point> getBBoxCorners() const;
+    
+    std::vector<ContourPlane> m_contourPlanes;
+    Nef_polyhedron m_partitionedSpace;
 };
 
 #endif
