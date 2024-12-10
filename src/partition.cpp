@@ -3,10 +3,69 @@
 #include <CGAL/bounding_box.h>
 #include <CGAL/convex_hull_3.h>
 #include <CGAL/Cartesian_converter.h>
-#include <CGAL/IO/Polyhedron_iostream.h>
-#include <CGAL/IO/Nef_polyhedron_iostream_3.h>
 #include <fstream>
 #include <iostream>
+#include <CGAL/IO/Polyhedron_OFF_iostream.h>
+#include <filesystem>
+namespace fs = std::filesystem;
+
+std::string SpacePartitioner::getConvexCellsPath(const std::string& contourName) const {
+    return "../data/convex_cells/" + contourName;
+}
+
+void SpacePartitioner::ensureDirectoryExists(const std::string& path) const {
+    fs::create_directories(path);
+}
+
+bool SpacePartitioner::loadConvexCells(const std::string& contourName) {
+    std::string cellsDir = getConvexCellsPath(contourName);
+    if (!fs::exists(cellsDir)) {
+        return false;
+    }
+
+    m_convexCells.clear();
+    size_t cellCount = 0;
+    bool success = true;
+
+    for (const auto& entry : fs::directory_iterator(cellsDir)) {
+        if (entry.path().extension() == ".off") {
+            CGAL::Polyhedron_3<ExactKernel> poly;
+            std::ifstream file(entry.path());
+            if (file && CGAL::read_off(file, poly)) {
+                m_convexCells.push_back(poly);
+                cellCount++;
+            } else {
+                success = false;
+                break;
+            }
+        }
+    }
+
+    if (!success || cellCount == 0) {
+        m_convexCells.clear();
+        return false;
+    }
+
+    std::cout << "Loaded " << cellCount << " convex cells from " << cellsDir << std::endl;
+    return true;
+}
+
+void SpacePartitioner::saveConvexCells(const std::string& contourName) const {
+    if (m_convexCells.empty()) return;
+
+    std::string cellsDir = getConvexCellsPath(contourName);
+    ensureDirectoryExists(cellsDir);
+
+    for (size_t i = 0; i < m_convexCells.size(); ++i) {
+        std::string filename = cellsDir + "/cell_" + std::to_string(i) + ".off";
+        std::ofstream file(filename);
+        if (file) {
+            CGAL::write_off(file, m_convexCells[i]);
+        }
+    }
+
+    std::cout << "Saved " << m_convexCells.size() << " convex cells to " << cellsDir << std::endl;
+}
 
 // Converter between kernels
 typedef CGAL::Cartesian_converter<InexactKernel, ExactKernel> IK_to_EK;
@@ -69,13 +128,28 @@ Nef_polyhedron SpacePartitioner::computeBoundingBox() const {
 }
 
 void SpacePartitioner::partition() {
+    // Extract contour name from first plane for directory naming
+    std::string contourName = fs::path(fs::path(m_contourPlanes[0].filename).stem()).string();
+    
+    // Try to load existing cells first
+    if (loadConvexCells(contourName)) {
+        return;
+    }
+
+    // Compute new partition if loading failed
+    std::cout << "Computing new partition for " << contourName << "..." << std::endl;
+
+    // Precompute exact planes once
+    precomputePlanes();
+
     m_partitionedSpace = computeBoundingBox();
     std::vector<Nef_polyhedron> nefPolys;
     
-    recursivePartition(m_partitionedSpace, m_contourPlanes, nefPolys);
 
     // Filter elementary cells
     std::vector<Nef_polyhedron> elementaryPolys;
+
+    partitionSpace(m_partitionedSpace, 0, nefPolys);
     
     for (size_t i = 0; i < nefPolys.size(); ++i) {
         bool isElementary = true;
@@ -119,75 +193,54 @@ void SpacePartitioner::partition() {
         cell.convert_to_polyhedron(poly);
         m_convexCells.push_back(poly);
     }
+
+    saveConvexCells(contourName);
 }
 
-void SpacePartitioner::recursivePartition(
-    Nef_polyhedron& space, 
-    const std::vector<ContourPlane>& contourPlanes, 
+void SpacePartitioner::precomputePlanes() {
+    IK_to_EK to_exact;
+    m_exactPlanes.reserve(m_contourPlanes.size());
+    for (const auto& plane : m_contourPlanes) {
+        m_exactPlanes.push_back(to_exact(plane.plane));
+    }
+}
+
+void SpacePartitioner::partitionSpace(
+    Nef_polyhedron& space,
+    size_t planeIndex,
     std::vector<Nef_polyhedron>& nefPolys) {
     
-    if (contourPlanes.empty()) {
-        if (!space.is_empty() && space.number_of_vertices() > 0) {
-            nefPolys.push_back(space);
-        }
+    // Early termination conditions
+    if (space.is_empty() || space.number_of_vertices() == 0) {
         return;
     }
     
-    // Get the first plane
-    const ContourPlane& plane = contourPlanes[0];
-    IK_to_EK to_exact;
-    ExactKernel::Plane_3 exact_plane = to_exact(plane.plane);
+    if (planeIndex >= m_exactPlanes.size()) {
+        nefPolys.push_back(space);
+        return;
+    }
     
-    // Create both halfspaces
+    // Get precomputed exact plane
+    const ExactKernel::Plane_3& exact_plane = m_exactPlanes[planeIndex];
+    
+    // Create halfspaces
     Nef_polyhedron plane_nef(exact_plane, Nef_polyhedron::INCLUDED);
-    Nef_polyhedron complement_nef = plane_nef.complement();
     
-    // Create two subspaces
+    // Partition space
     Nef_polyhedron positive_space = space * plane_nef;
-    Nef_polyhedron negative_space = space * complement_nef;
     
-    // Only recurse on non-empty spaces
-    std::vector<ContourPlane> remaining_planes(
-        contourPlanes.begin() + 1, 
-        contourPlanes.end()
-    );
-    
+    // Only compute complement if needed
     if (!positive_space.is_empty() && positive_space.number_of_vertices() > 0) {
-        recursivePartition(positive_space, remaining_planes, nefPolys);
+        partitionSpace(positive_space, planeIndex + 1, nefPolys);
     }
     
-    if (!negative_space.is_empty() && negative_space.number_of_vertices() > 0) {
-        recursivePartition(negative_space, remaining_planes, nefPolys);
+    // Reuse original space for negative half-space
+    space *= plane_nef.complement();
+    if (!space.is_empty() && space.number_of_vertices() > 0) {
+        partitionSpace(space, planeIndex + 1, nefPolys);
     }
 }
 
-void SpacePartitioner::renderPartitions() const {
-    if (m_partitionedSpace.is_empty()) {
-        return;
-    }
-
-    EK_to_IK to_inexact;
-    CGAL::Polyhedron_3<ExactKernel> exact_poly;
-    m_partitionedSpace.convert_to_polyhedron(exact_poly);
-
-    glColor3f(0.0f, 0.0f, 1.0f);
-    glLineWidth(2.0f);
-    
-    for (auto e = exact_poly.edges_begin(); e != exact_poly.edges_end(); ++e) {
-        // Convert vertices back to inexact for rendering
-        Point v1 = to_inexact(e->vertex()->point());
-        Point v2 = to_inexact(e->opposite()->vertex()->point());
-        
-        glBegin(GL_LINES);
-        glVertex3d(CGAL::to_double(v1.x()), 
-                  CGAL::to_double(v1.y()),
-                  CGAL::to_double(v1.z()));
-        glVertex3d(CGAL::to_double(v2.x()),
-                  CGAL::to_double(v2.y()), 
-                  CGAL::to_double(v2.z()));
-        glEnd();
-    }
-}
 
 void SpacePartitioner::renderPolyhedron(const CGAL::Polyhedron_3<ExactKernel>& poly) const {
     EK_to_IK to_inexact;

@@ -11,12 +11,19 @@ class SpacePartitioner {
 public:
     SpacePartitioner(const std::vector<ContourPlane>& contourPlanes);
     void partition();
-    void renderPartitions() const;
+    bool loadConvexCells(const std::string& contourName);
+    void saveConvexCells(const std::string& contourName) const;
     void renderPolyhedron(const CGAL::Polyhedron_3<ExactKernel>& poly) const;
     std::vector<CGAL::Polyhedron_3<ExactKernel>> getConvexCells() { return m_convexCells; }
 
 private:
-    void recursivePartition(Nef_polyhedron& space, const std::vector<ContourPlane>& contourPlanes, std::vector<CGAL::Nef_polyhedron_3<ExactKernel>>& nefPolys);
+    std::string getConvexCellsPath(const std::string& contourName) const;
+    void ensureDirectoryExists(const std::string& path) const;
+    std::vector<ExactKernel::Plane_3> m_exactPlanes;
+    void precomputePlanes();
+    void partitionSpace(Nef_polyhedron& space, 
+                       size_t planeIndex,
+                       std::vector<Nef_polyhedron>& nefPolys);
     Nef_polyhedron computeBoundingBox() const;
     std::pair<Point, Point> getBBoxCorners() const;
     std::vector<CGAL::Polyhedron_3<ExactKernel>> m_convexCells;

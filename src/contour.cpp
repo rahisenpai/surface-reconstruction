@@ -20,6 +20,7 @@ std::vector<ContourPlane> parseContourFile(const std::string& filePath) {
         Plane plane(a, b, c, d);
 
         ContourPlane contourPlane;
+        contourPlane.filename = filePath;
         contourPlane.plane = plane;
 
         int numVertices, numEdges;

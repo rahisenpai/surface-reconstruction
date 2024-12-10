@@ -27,7 +27,7 @@ int main() {
         SpacePartitioner* partitioner = nullptr;
         try {
             partitioner = new SpacePartitioner(contourPlanes);
-            // partitioner->partition();
+            partitioner->partition();
         }
         catch (const std::exception& e) {
             std::cerr << "Partitioner initialization error: " << e.what() << std::endl;
@@ -101,7 +101,7 @@ int main() {
                             contourPlanes = std::move(newContours);
                             delete partitioner;
                             partitioner = new SpacePartitioner(contourPlanes);
-                            // partitioner->partition();
+                            partitioner->partition();
                             lastKeyPressTime = currentTime;
                             
                             std::cout << "Switched to: " << fs.getCurrentFileName() 
@@ -130,9 +130,11 @@ int main() {
             try {
                 if (!contourPlanes.empty()) {
                     renderContourPlanes(contourPlanes);
-                    // if (partitioner) {
-                    //     partitioner->renderPartitions();
-                    // }
+                    if (partitioner->getConvexCells().size() > 0) {
+                        for (const auto& cell : partitioner->getConvexCells()) {
+                            partitioner->renderPolyhedron(cell);
+                        }
+                    }
                 }
             }
             catch (const std::exception& e) {

@@ -26,6 +26,7 @@ struct ContourPlane {
     Plane plane;
     std::vector<Point> vertices;
     std::vector<std::pair<int, int>> edges;
+    std::string filename;
 };
 
 std::vector<ContourPlane> parseContourFile(const std::string& filePath);
