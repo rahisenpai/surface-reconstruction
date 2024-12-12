@@ -33,6 +33,7 @@ struct ProjectedContour {
     const AxisPlanes::Plane* projectionPlane;
     std::vector<Point> projectedVertices;
     ReconstructedMesh reconstructedSurface;
+    bool useExtendedMesh = false;
 };
  
 struct CellProjections {
@@ -44,7 +45,6 @@ class Projection {
 public:
     Projection(const SpacePartitioner& partitioner);
     
-    // Access methods
     size_t getCellCount() const { return m_cells.size(); }
     const std::vector<SpacePartitioner::ConvexCell>& getCells() const { return m_cells; }
     std::vector<ContourPlane> getPlanesForCell(size_t cellIndex) const;
@@ -63,6 +63,7 @@ private:
     ReconstructedMesh reconstructCellSurface(
     const std::vector<Point>& originalVertices,
     const std::vector<Point>& projectedVertices) const;
+    ReconstructedMesh convertExtendedToReconstructedMesh(const ExtendedMesh& extMesh) const;
     ReconstructedMesh triangulateVertices(const std::vector<Point>& vertices) const;
     void reconstructSurface(ProjectedContour& projection);
     void renderReconstructedSurface(const ReconstructedMesh& mesh) const;

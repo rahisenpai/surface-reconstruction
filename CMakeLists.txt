@@ -17,7 +17,7 @@ find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(glm REQUIRED)
 find_package(CGAL REQUIRED)
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(GLUT REQUIRED)
 
 find_library(GLU_LIB GLU)
 
@@ -26,4 +26,4 @@ file(GLOB SOURCES "src/*.cpp")
 add_executable(SurfaceReconstruction ${SOURCES})
 
 # Link the libraries
-target_link_libraries(SurfaceReconstruction OpenGL::GL GLEW::GLEW glfw glm::glm ${GLU_LIB} CGAL::CGAL)
+target_link_libraries(SurfaceReconstruction OpenGL::GL GLEW::GLEW glfw glm::glm ${GLU_LIB} CGAL::CGAL GLUT::GLUT)

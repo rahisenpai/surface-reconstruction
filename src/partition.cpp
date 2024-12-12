@@ -97,7 +97,7 @@ std::pair<Point, Point> SpacePartitioner::getBBoxCorners() const {
     double dx = bbox.xmax() - bbox.xmin();
     double dy = bbox.ymax() - bbox.ymin();
     double dz = bbox.zmax() - bbox.zmin();
-    double padding = 0.02 * std::sqrt(dx*dx + dy*dy + dz*dz);
+    double padding = 0.05 * std::sqrt(dx*dx + dy*dy + dz*dz);
     
     return std::make_pair(
         Point(bbox.xmin() - padding, bbox.ymin() - padding, bbox.zmin() - padding),

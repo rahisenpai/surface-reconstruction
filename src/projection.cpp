@@ -271,47 +271,73 @@ void Projection::computeProjections() {
         auto contourPlanes = getPlanesForCell(cellIdx);
         const auto& axisPlanes = getAxisPlanesForCell(cellIdx);
 
-        // Select a common projection plane for the cell
-        const AxisPlanes::Plane* commonProjectionPlane = nullptr;
-        if (!contourPlanes.empty()) {
-            // For simplicity, select projection plane based on the first contour plane
-            commonProjectionPlane = selectProjectionPlane(contourPlanes[0], axisPlanes);
-        }
-
-        if (!commonProjectionPlane) {
-            continue; // Skip this cell if no projection plane is found
-        }
-
-        // Collect all original and projected vertices for this cell
-        std::vector<Point> originalVertices;
-        std::vector<Point> projectedVertices;
-
+        // First check for extended mesh data
+        bool hasExtendedMesh = false;
         for (const auto& contourPlane : contourPlanes) {
-            originalVertices.insert(originalVertices.end(),
-                                    contourPlane.vertices.begin(),
-                                    contourPlane.vertices.end());
-
-            std::vector<Point> projVertices = projectVerticesOntoPlane(
-                contourPlane.vertices, *commonProjectionPlane);
-            projectedVertices.insert(projectedVertices.end(),
-                                     projVertices.begin(), projVertices.end());
+            if (contourPlane.hasExt) {
+                ProjectedContour proj;
+                proj.originalPlane = &contourPlane;
+                proj.useExtendedMesh = true;
+                proj.reconstructedSurface = convertExtendedToReconstructedMesh(contourPlane.extMesh);
+                cellProj.projections.push_back(proj);
+                hasExtendedMesh = true;
+                break;
+            }
         }
 
-        if (!originalVertices.empty() && !projectedVertices.empty()) {
-            // Reconstruct surface for this cell
-            ReconstructedMesh reconstructedMesh = reconstructCellSurface(originalVertices, projectedVertices);
+        // Only proceed with normal reconstruction if no extended mesh was found
+        if (!hasExtendedMesh) {
+            for (const auto& contourPlane : contourPlanes) {
+                // Find best projection plane
+                const AxisPlanes::Plane* projPlane = selectProjectionPlane(contourPlane, axisPlanes);
+                if (!projPlane) continue;
 
-            // Create a single ProjectedContour for the cell
-            ProjectedContour proj;
-            proj.originalPlane = nullptr; // Since it's the whole cell
-            proj.projectionPlane = commonProjectionPlane;
-            proj.projectedVertices = projectedVertices;
-            proj.reconstructedSurface = reconstructedMesh;
+                ProjectedContour proj;
+                proj.originalPlane = &contourPlane;
+                proj.projectionPlane = projPlane;
+                
+                // Project vertices onto selected plane
+                proj.projectedVertices = projectVerticesOntoPlane(contourPlane.vertices, *projPlane);
 
-            cellProj.projections.push_back(proj);
+                // Reconstruct surface using original and projected vertices
+                proj.reconstructedSurface = reconstructCellSurface(
+                    contourPlane.vertices,
+                    proj.projectedVertices
+                );
+
+                cellProj.projections.push_back(proj);
+            }
+        }
+
+        if (!cellProj.projections.empty()) {
             m_projectedContours.push_back(cellProj);
         }
     }
+}
+
+ReconstructedMesh Projection::convertExtendedToReconstructedMesh(const ExtendedMesh& extMesh) const {
+    ReconstructedMesh result;
+    result.vertices = extMesh.vertices;
+    
+    // Convert faces to triangles format
+    for (const auto& face : extMesh.faces) {
+        result.triangles.push_back({face.v1, face.v2, face.v3});
+    }
+
+    // Create surface mesh
+    for (const auto& p : extMesh.vertices) {
+        result.mesh.add_vertex(p);
+    }
+    
+    for (const auto& triangle : result.triangles) {
+        result.mesh.add_face(
+            typename CGAL::Surface_mesh<Point>::Vertex_index(triangle[0]),
+            typename CGAL::Surface_mesh<Point>::Vertex_index(triangle[1]),
+            typename CGAL::Surface_mesh<Point>::Vertex_index(triangle[2])
+        );
+    }
+
+    return result;
 }
 
 ReconstructedMesh Projection::reconstructCellSurface(
@@ -442,25 +468,12 @@ void Projection::reconstructSurface(ProjectedContour& projection) {
 }
 
 void Projection::renderReconstructedSurface(const ReconstructedMesh& mesh) const {
-    // First render triangles
-    glColor3f(0.2f, 0.6f, 0.8f);
+    // Simple solid color rendering without lighting
+    glDisable(GL_LIGHTING);
+    glColor3f(1.0f, 0.6f, 0.8f);  // Pink color
     
     glBegin(GL_TRIANGLES);
     for(const auto& triangle : mesh.triangles) {
-        // Normal computation for depth perception
-        const Point& p0 = mesh.vertices[triangle[0]];
-        const Point& p1 = mesh.vertices[triangle[1]];
-        const Point& p2 = mesh.vertices[triangle[2]];
-        
-        CGAL::Vector_3<InexactKernel> v1(p1.x() - p0.x(), p1.y() - p0.y(), p1.z() - p0.z());
-        CGAL::Vector_3<InexactKernel> v2(p2.x() - p0.x(), p2.y() - p0.y(), p2.z() - p0.z());
-        auto normal = CGAL::cross_product(v1, v2);
-        normal = normal / std::sqrt(normal.squared_length());
-
-        glNormal3d(CGAL::to_double(normal.x()),
-                  CGAL::to_double(normal.y()),
-                  CGAL::to_double(normal.z()));
-
         for(size_t idx : triangle) {
             const Point& p = mesh.vertices[idx];
             glVertex3d(CGAL::to_double(p.x()),
@@ -470,13 +483,12 @@ void Projection::renderReconstructedSurface(const ReconstructedMesh& mesh) const
     }
     glEnd();
 
-    // Then render edges
-    glLineWidth(1.5f);
+    // Render edges
+    glLineWidth(1.0f);
     glColor3f(0.0f, 0.0f, 0.0f);  // Black edges
     
     glBegin(GL_LINES);
     for(const auto& triangle : mesh.triangles) {
-        // Draw three edges of each triangle
         for(int i = 0; i < 3; i++) {
             const Point& p1 = mesh.vertices[triangle[i]];
             const Point& p2 = mesh.vertices[triangle[(i + 1) % 3]];
@@ -490,8 +502,6 @@ void Projection::renderReconstructedSurface(const ReconstructedMesh& mesh) const
         }
     }
     glEnd();
-    
-    glLineWidth(1.0f);  // Reset line width
 }
 
 void Projection::renderAllReconstructions() const {
