@@ -15,10 +15,12 @@ public:
     const std::vector<SpacePartitioner::ConvexCell>& getCells() const { return m_cells; }
     std::vector<ContourPlane> getPlanesForCell(size_t cellIndex) const;
     void debugPrintCellInfo() const;
+    void renderPlanesForAllCells();
 
 private:
     std::vector<SpacePartitioner::ConvexCell> m_cells;
     std::vector<ContourPlane> m_contourPlanes;
+    void renderPlanesForCell(const CGAL::Polyhedron_3<ExactKernel>& poly) const;
 };
 
 #endif

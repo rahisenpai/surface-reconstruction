@@ -30,12 +30,14 @@ int main()
 
         // Initialize partitioner with validation
         SpacePartitioner *partitioner = nullptr;
+        Projection *projection = nullptr;
+
         try
         {
             partitioner = new SpacePartitioner(contourPlanes);
             partitioner->partition();
-            Projection projection(*partitioner);
-            projection.debugPrintCellInfo();
+            projection = new Projection(*partitioner);
+            projection->debugPrintCellInfo();
         }
         catch (const std::exception &e)
         {
@@ -61,6 +63,7 @@ int main()
         if (glewInit() != GLEW_OK)
         {
             delete partitioner;
+            delete projection;
             glfwDestroyWindow(window);
             glfwTerminate();
             throw std::runtime_error("Failed to initialize GLEW");
@@ -125,8 +128,9 @@ int main()
                             partitioner = new SpacePartitioner(contourPlanes);
                             partitioner->partition();
 
-                            Projection projection(*partitioner);
-                            projection.debugPrintCellInfo();
+                            delete projection;
+                            projection = new Projection(*partitioner);
+                            projection->debugPrintCellInfo();
 
                             lastKeyPressTime = currentTime;
 
@@ -166,6 +170,7 @@ int main()
                             partitioner->renderPolyhedron(cell);
                         }
                     }
+                    projection->renderPlanesForAllCells();
                 }
             }
             catch (const std::exception &e)
@@ -179,6 +184,7 @@ int main()
 
         // Cleanup
         delete partitioner;
+        delete projection;
         glfwDestroyWindow(window);
         glfwTerminate();
         return 0;
