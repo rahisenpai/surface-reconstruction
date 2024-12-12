@@ -37,7 +37,7 @@ int main()
             partitioner = new SpacePartitioner(contourPlanes);
             partitioner->partition();
             projection = new Projection(*partitioner);
-            projection->debugPrintCellInfo();
+            // projection->debugPrintCellInfo();
         }
         catch (const std::exception &e)
         {
@@ -130,7 +130,7 @@ int main()
 
                             delete projection;
                             projection = new Projection(*partitioner);
-                            projection->debugPrintCellInfo();
+                            // projection->debugPrintCellInfo();
 
                             lastKeyPressTime = currentTime;
 
@@ -167,10 +167,11 @@ int main()
                     {
                         for (const auto &cell : partitioner->getConvexCells())
                         {
-                            partitioner->renderPolyhedron(cell);
+                            // partitioner->renderPolyhedron(cell);
                         }
                     }
-                    projection->renderPlanesForAllCells();
+                    // projection->renderPlanesForAllCells();
+                    projection->renderAllReconstructions();
                 }
             }
             catch (const std::exception &e)

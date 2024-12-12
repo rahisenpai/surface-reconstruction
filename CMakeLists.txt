@@ -17,6 +17,7 @@ find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(glm REQUIRED)
 find_package(CGAL REQUIRED)
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 find_library(GLU_LIB GLU)
 
