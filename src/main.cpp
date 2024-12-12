@@ -5,49 +5,61 @@
 #include "contour.h"
 #include "partition.h"
 #include "filesystem.h"
+#include "projection.h"
 
-int main() {
-    try {
+int main()
+{
+    try
+    {
         // Initialize filesystem with debug output
         FileSystem fs("../data");
-        if (fs.getFileCount() == 0) {
+        if (fs.getFileCount() == 0)
+        {
             throw std::runtime_error("No contour files found in data directory");
         }
         std::cout << "Found " << fs.getFileCount() << " contour files" << std::endl;
-        
+
         // Load initial contours with validation
         std::vector<ContourPlane> contourPlanes = fs.getCurrentContours();
-        if (contourPlanes.empty()) {
+        if (contourPlanes.empty())
+        {
             throw std::runtime_error("Failed to load initial contours");
         }
-        std::cout << "Loaded initial file: " << fs.getCurrentFileName() 
+        std::cout << "Loaded initial file: " << fs.getCurrentFileName()
                   << " with " << contourPlanes.size() << " planes" << std::endl;
-        
+
         // Initialize partitioner with validation
-        SpacePartitioner* partitioner = nullptr;
-        try {
+        SpacePartitioner *partitioner = nullptr;
+        try
+        {
             partitioner = new SpacePartitioner(contourPlanes);
             partitioner->partition();
+            Projection projection(*partitioner);
+            projection.debugPrintCellInfo();
         }
-        catch (const std::exception& e) {
+        catch (const std::exception &e)
+        {
             std::cerr << "Partitioner initialization error: " << e.what() << std::endl;
             throw;
         }
 
         // GLFW initialization remains the same...
-        if (!glfwInit()) {
+        if (!glfwInit())
+        {
             throw std::runtime_error("Failed to initialize GLFW");
         }
 
-        GLFWwindow* window = glfwCreateWindow(1280, 720, "Contour Viewer", nullptr, nullptr);
-        if (!window) {
+        GLFWwindow *window = glfwCreateWindow(1280, 720, "Contour Viewer", nullptr, nullptr);
+        if (!window)
+        {
             glfwTerminate();
             throw std::runtime_error("Failed to create GLFW window");
         }
 
         glfwMakeContextCurrent(window);
         glewExperimental = GL_TRUE;
-        if (glewInit() != GLEW_OK) {
+        if (glewInit() != GLEW_OK)
+        {
             delete partitioner;
             glfwDestroyWindow(window);
             glfwTerminate();
@@ -67,27 +79,35 @@ int main() {
         double lastKeyPressTime = 0.0;
         const double keyPressDelay = 0.5; // Increased delay
 
-        while (!glfwWindowShouldClose(window)) {
+        while (!glfwWindowShouldClose(window))
+        {
             double currentTime = glfwGetTime();
-            
+
             // Handle file switching with delay and validation
-            if (currentTime - lastKeyPressTime > keyPressDelay) {
+            if (currentTime - lastKeyPressTime > keyPressDelay)
+            {
                 bool fileChanged = false;
                 size_t oldIndex = fs.getCurrentIndex();
-                
-                try {
+
+                try
+                {
                     // File switching logic
-                    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+                    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+                    {
                         fs.nextFile();
                         fileChanged = (oldIndex != fs.getCurrentIndex());
                     }
-                    else if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+                    else if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+                    {
                         fs.previousFile();
                         fileChanged = (oldIndex != fs.getCurrentIndex());
                     }
-                    else {
-                        for (int i = 0; i < 9 && i < fs.getFileCount(); i++) {
-                            if (glfwGetKey(window, GLFW_KEY_1 + i) == GLFW_PRESS) {
+                    else
+                    {
+                        for (int i = 0; i < 9 && i < fs.getFileCount(); i++)
+                        {
+                            if (glfwGetKey(window, GLFW_KEY_1 + i) == GLFW_PRESS)
+                            {
                                 fileChanged = fs.selectFile(i);
                                 break;
                             }
@@ -95,22 +115,29 @@ int main() {
                     }
 
                     // Update data if file changed
-                    if (fileChanged) {
+                    if (fileChanged)
+                    {
                         std::vector<ContourPlane> newContours = fs.getCurrentContours();
-                        if (!newContours.empty()) {
+                        if (!newContours.empty())
+                        {
                             contourPlanes = std::move(newContours);
                             delete partitioner;
                             partitioner = new SpacePartitioner(contourPlanes);
                             partitioner->partition();
+
+                            Projection projection(*partitioner);
+                            projection.debugPrintCellInfo();
+
                             lastKeyPressTime = currentTime;
-                            
-                            std::cout << "Switched to: " << fs.getCurrentFileName() 
-                                     << " (File " << fs.getCurrentIndex() + 1 
-                                     << "/" << fs.getFileCount() << ")" << std::endl;
+
+                            std::cout << "Switched to: " << fs.getCurrentFileName()
+                                      << " (File " << fs.getCurrentIndex() + 1
+                                      << "/" << fs.getFileCount() << ")" << std::endl;
                         }
                     }
                 }
-                catch (const std::exception& e) {
+                catch (const std::exception &e)
+                {
                     std::cerr << "File switching error: " << e.what() << std::endl;
                 }
             }
@@ -126,18 +153,23 @@ int main() {
 
             // Render with validation
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            
-            try {
-                if (!contourPlanes.empty()) {
+
+            try
+            {
+                if (!contourPlanes.empty())
+                {
                     renderContourPlanes(contourPlanes);
-                    if (partitioner->getConvexCells().size() > 0) {
-                        for (const auto& cell : partitioner->getConvexCells()) {
+                    if (partitioner->getConvexCells().size() > 0)
+                    {
+                        for (const auto &cell : partitioner->getConvexCells())
+                        {
                             partitioner->renderPolyhedron(cell);
                         }
                     }
                 }
             }
-            catch (const std::exception& e) {
+            catch (const std::exception &e)
+            {
                 std::cerr << "Render error: " << e.what() << std::endl;
             }
 
@@ -151,7 +183,8 @@ int main() {
         glfwTerminate();
         return 0;
     }
-    catch (const std::exception& e) {
+    catch (const std::exception &e)
+    {
         std::cerr << "Fatal error: " << e.what() << std::endl;
         glfwTerminate();
         return -1;

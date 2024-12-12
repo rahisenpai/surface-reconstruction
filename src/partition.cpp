@@ -19,52 +19,61 @@ void SpacePartitioner::ensureDirectoryExists(const std::string& path) const {
 
 bool SpacePartitioner::loadConvexCells(const std::string& contourName) {
     std::string cellsDir = getConvexCellsPath(contourName);
-    if (!fs::exists(cellsDir)) {
-        return false;
-    }
+    if (!fs::exists(cellsDir)) return false;
 
-    m_convexCells.clear();
+    m_cells.clear();
     size_t cellCount = 0;
-    bool success = true;
 
     for (const auto& entry : fs::directory_iterator(cellsDir)) {
         if (entry.path().extension() == ".off") {
-            CGAL::Polyhedron_3<ExactKernel> poly;
-            std::ifstream file(entry.path());
-            if (file && CGAL::read_off(file, poly)) {
-                m_convexCells.push_back(poly);
-                cellCount++;
-            } else {
-                success = false;
-                break;
+            ConvexCell cell;
+            
+            // Load geometry
+            std::ifstream geomFile(entry.path());
+            if (!geomFile || !CGAL::read_off(geomFile, cell.geometry)) {
+                return false;
             }
+
+            // Load plane associations
+            std::string planesPath = entry.path().string();
+            planesPath.replace(planesPath.end()-4, planesPath.end(), ".planes");
+            std::ifstream planesFile(planesPath);
+            size_t planeIdx;
+            while (planesFile >> planeIdx) {
+                cell.planeIndices.push_back(planeIdx);
+            }
+
+            m_cells.push_back(cell);
+            cellCount++;
         }
     }
 
-    if (!success || cellCount == 0) {
-        m_convexCells.clear();
-        return false;
-    }
-
-    std::cout << "Loaded " << cellCount << " convex cells from " << cellsDir << std::endl;
-    return true;
+    return cellCount > 0;
 }
 
 void SpacePartitioner::saveConvexCells(const std::string& contourName) const {
-    if (m_convexCells.empty()) return;
+    if (m_cells.empty()) return;
 
     std::string cellsDir = getConvexCellsPath(contourName);
     ensureDirectoryExists(cellsDir);
 
-    for (size_t i = 0; i < m_convexCells.size(); ++i) {
-        std::string filename = cellsDir + "/cell_" + std::to_string(i) + ".off";
-        std::ofstream file(filename);
-        if (file) {
-            CGAL::write_off(file, m_convexCells[i]);
+    for (size_t i = 0; i < m_cells.size(); ++i) {
+        // Save geometry
+        std::string offFile = cellsDir + "/cell_" + std::to_string(i) + ".off";
+        std::ofstream geomFile(offFile);
+        if (geomFile) {
+            CGAL::write_off(geomFile, m_cells[i].geometry);
+        }
+
+        // Save plane associations
+        std::string planesFile = cellsDir + "/cell_" + std::to_string(i) + ".planes";
+        std::ofstream planeFile(planesFile);
+        if (planeFile) {
+            for (size_t idx : m_cells[i].planeIndices) {
+                planeFile << idx << " ";
+            }
         }
     }
-
-    std::cout << "Saved " << m_convexCells.size() << " convex cells to " << cellsDir << std::endl;
 }
 
 // Converter between kernels
@@ -128,70 +137,48 @@ Nef_polyhedron SpacePartitioner::computeBoundingBox() const {
 }
 
 void SpacePartitioner::partition() {
-    // Extract contour name from first plane for directory naming
-    std::string contourName = fs::path(fs::path(m_contourPlanes[0].filename).stem()).string();
+    std::string contourName = fs::path(m_contourPlanes[0].filename).stem().string();
     
-    // Try to load existing cells first
     if (loadConvexCells(contourName)) {
         return;
     }
 
-    // Compute new partition if loading failed
-    std::cout << "Computing new partition for " << contourName << "..." << std::endl;
-
-    // Precompute exact planes once
+    std::cout << "Computing partition for " << contourName << "..." << std::endl;
     precomputePlanes();
-
     m_partitionedSpace = computeBoundingBox();
-    std::vector<Nef_polyhedron> nefPolys;
     
+    std::vector<std::pair<Nef_polyhedron, std::set<size_t>>> nefPolys;
+    partitionSpace(m_partitionedSpace, 0, nefPolys);
 
     // Filter elementary cells
-    std::vector<Nef_polyhedron> elementaryPolys;
-
-    partitionSpace(m_partitionedSpace, 0, nefPolys);
-    
-    for (size_t i = 0; i < nefPolys.size(); ++i) {
+    m_cells.clear();
+    for (const auto& [nef, planeSet] : nefPolys) {
         bool isElementary = true;
-        
-        // Convert to Polyhedron to compute volume
         CGAL::Polyhedron_3<ExactKernel> poly_i;
-        nefPolys[i].convert_to_polyhedron(poly_i);
+        nef.convert_to_polyhedron(poly_i);
         
-        for (size_t j = 0; j < nefPolys.size(); ++j) {
-            if (i != j) {
-                CGAL::Polyhedron_3<ExactKernel> poly_j;
-                nefPolys[j].convert_to_polyhedron(poly_j);
-                
-                // Check intersection
-                Nef_polyhedron intersection = nefPolys[i] * nefPolys[j];
-                
+        for (const auto& [other_nef, other_set] : nefPolys) {
+            if (&nef != &other_nef) {
+                Nef_polyhedron intersection = nef * other_nef;
                 if (!intersection.is_empty()) {
                     CGAL::Polyhedron_3<ExactKernel> poly_intersection;
                     intersection.convert_to_polyhedron(poly_intersection);
                     
-                    // Compare number of vertices and facets instead of volume
-                    if (poly_intersection.size_of_vertices() == poly_i.size_of_vertices() ||
-                        poly_intersection.size_of_vertices() == poly_j.size_of_vertices()) {
-                        if (poly_i.size_of_vertices() <= poly_j.size_of_vertices()) {
-                            isElementary = false;
-                            break;
-                        }
+                    if (poly_intersection.size_of_vertices() == poly_i.size_of_vertices()) {
+                        isElementary = false;
+                        break;
                     }
                 }
             }
         }
         
         if (isElementary) {
-            elementaryPolys.push_back(nefPolys[i]);
+            ConvexCell cell;
+            nef.convert_to_polyhedron(cell.geometry);
+            cell.planeIndices.insert(cell.planeIndices.end(), 
+                                   planeSet.begin(), planeSet.end());
+            m_cells.push_back(cell);
         }
-    }
-
-    // Convert to regular polyhedra
-    for (const auto& cell : elementaryPolys) {
-        CGAL::Polyhedron_3<ExactKernel> poly;
-        cell.convert_to_polyhedron(poly);
-        m_convexCells.push_back(poly);
     }
 
     saveConvexCells(contourName);
@@ -208,52 +195,73 @@ void SpacePartitioner::precomputePlanes() {
 void SpacePartitioner::partitionSpace(
     Nef_polyhedron& space,
     size_t planeIndex,
-    std::vector<Nef_polyhedron>& nefPolys) {
+    std::vector<std::pair<Nef_polyhedron, std::set<size_t>>>& nefPolys) {
     
-    // Early termination conditions
     if (space.is_empty() || space.number_of_vertices() == 0) {
         return;
     }
     
     if (planeIndex >= m_exactPlanes.size()) {
-        nefPolys.push_back(space);
+        nefPolys.push_back({space, std::set<size_t>()});
         return;
     }
     
-    // Get precomputed exact plane
     const ExactKernel::Plane_3& exact_plane = m_exactPlanes[planeIndex];
-    
-    // Create halfspaces
     Nef_polyhedron plane_nef(exact_plane, Nef_polyhedron::INCLUDED);
     
-    // Partition space
     Nef_polyhedron positive_space = space * plane_nef;
-    
-    // Only compute complement if needed
     if (!positive_space.is_empty() && positive_space.number_of_vertices() > 0) {
+        std::set<size_t> pos_planes;
+        if (!nefPolys.empty()) {
+            pos_planes = nefPolys.back().second;
+        }
+        pos_planes.insert(planeIndex);
         partitionSpace(positive_space, planeIndex + 1, nefPolys);
+        if (!nefPolys.empty()) {
+            nefPolys.back().second = pos_planes;
+        }
     }
     
-    // Reuse original space for negative half-space
     space *= plane_nef.complement();
     if (!space.is_empty() && space.number_of_vertices() > 0) {
         partitionSpace(space, planeIndex + 1, nefPolys);
     }
 }
 
+std::vector<ContourPlane> SpacePartitioner::getPlanesForCell(size_t cellIndex) const {
+    if (cellIndex >= m_cells.size()) return {};
 
-void SpacePartitioner::renderPolyhedron(const CGAL::Polyhedron_3<ExactKernel>& poly) const {
+    std::vector<ContourPlane> planes;
+    for (size_t idx : m_cells[cellIndex].planeIndices) {
+        if (idx < m_contourPlanes.size()) {
+            planes.push_back(m_contourPlanes[idx]);
+        }
+    }
+    return planes;
+}
+
+
+void SpacePartitioner::renderPolyhedron(const ConvexCell& cell, bool highlight) const {
     EK_to_IK to_inexact;
-    glColor3f(0.0f, 0.0f, 1.0f); 
+    
+    if (highlight) {
+        glColor3f(1.0f, 0.0f, 0.0f); // Red for highlighted cells
+    } else {
+        glColor3f(0.0f, 0.0f, 1.0f); // Blue for normal cells
+    }
     glLineWidth(2.0f);
 
-    for (auto e = poly.edges_begin(); e != poly.edges_end(); ++e) {
+    for (auto e = cell.geometry.edges_begin(); e != cell.geometry.edges_end(); ++e) {
         Point v1 = to_inexact(e->vertex()->point());
         Point v2 = to_inexact(e->opposite()->vertex()->point());
 
         glBegin(GL_LINES);
-        glVertex3d(CGAL::to_double(v1.x()), CGAL::to_double(v1.y()), CGAL::to_double(v1.z()));
-        glVertex3d(CGAL::to_double(v2.x()), CGAL::to_double(v2.y()), CGAL::to_double(v2.z()));
+        glVertex3d(CGAL::to_double(v1.x()), 
+                  CGAL::to_double(v1.y()), 
+                  CGAL::to_double(v1.z()));
+        glVertex3d(CGAL::to_double(v2.x()), 
+                  CGAL::to_double(v2.y()), 
+                  CGAL::to_double(v2.z()));
         glEnd();
     }
 }

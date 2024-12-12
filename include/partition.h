@@ -4,17 +4,24 @@
 
 #include <CGAL/Nef_polyhedron_3.h>
 #include "contour.h"
+#include <set>
 
 typedef CGAL::Nef_polyhedron_3<ExactKernel> Nef_polyhedron;
 
 class SpacePartitioner {
 public:
+    struct ConvexCell {
+        CGAL::Polyhedron_3<ExactKernel> geometry;
+        std::vector<size_t> planeIndices;  // Indices of defining planes
+    };
+
     SpacePartitioner(const std::vector<ContourPlane>& contourPlanes);
     void partition();
     bool loadConvexCells(const std::string& contourName);
     void saveConvexCells(const std::string& contourName) const;
-    void renderPolyhedron(const CGAL::Polyhedron_3<ExactKernel>& poly) const;
-    std::vector<CGAL::Polyhedron_3<ExactKernel>> getConvexCells() { return m_convexCells; }
+    void renderPolyhedron(const ConvexCell& cell, bool highlight = false) const;
+    const std::vector<ConvexCell>& getConvexCells() const { return m_cells; }
+    std::vector<ContourPlane> getPlanesForCell(size_t cellIndex) const;
 
 private:
     std::string getConvexCellsPath(const std::string& contourName) const;
@@ -23,10 +30,11 @@ private:
     void precomputePlanes();
     void partitionSpace(Nef_polyhedron& space, 
                        size_t planeIndex,
-                       std::vector<Nef_polyhedron>& nefPolys);
+                       std::vector<std::pair<Nef_polyhedron, std::set<size_t>>>& nefPolys);
     Nef_polyhedron computeBoundingBox() const;
     std::pair<Point, Point> getBBoxCorners() const;
-    std::vector<CGAL::Polyhedron_3<ExactKernel>> m_convexCells;
+    
+    std::vector<ConvexCell> m_cells;
     std::vector<ContourPlane> m_contourPlanes;
     Nef_polyhedron m_partitionedSpace;
 };

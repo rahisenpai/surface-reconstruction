@@ -27,6 +27,14 @@ struct ContourPlane {
     std::vector<Point> vertices;
     std::vector<std::pair<int, int>> edges;
     std::string filename;
+
+    // Add equality operator
+    bool operator==(const ContourPlane& other) const {
+        return plane == other.plane &&
+               vertices == other.vertices &&
+               edges == other.edges &&
+               filename == other.filename;
+    }
 };
 
 std::vector<ContourPlane> parseContourFile(const std::string& filePath);
