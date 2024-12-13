@@ -46,7 +46,7 @@ void renderHelpOverlay() {
     std::stringstream ss;
     ss << "Controls:" << std::endl
        << "Left/Right Arrow: Switch files" << std::endl
-       << "1-9: Select file directly" << std::endl
+       << "1-4: Select file directly" << std::endl
        << "C: Toggle convex cells (" << (g_showConvexCells ? "ON" : "OFF") << ")" << std::endl
        << "S: Toggle surface meshes (" << (g_showSurfaceMeshes ? "ON" : "OFF") << ")" << std::endl
        << "Mouse: Look around" << std::endl
